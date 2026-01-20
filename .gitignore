@@ -1,0 +1,30 @@
+# Dependencies
+/lib/
+/node_modules/
+
+# Build
+/out/
+/cache/
+/artifacts/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+lcov.info
+coverage/
+
+# Python venv (from PDF extraction)
+.venv/
