@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
+
+import "forge-std/Test.sol";
+import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import "../../src/ACTXToken.sol";
+
+contract ACTXTokenHandler is Test {
+    ACTXToken public token;
+    address public treasury;
+    address public rewardManager;
+
+    uint256 public totalDistributed;
+
+    constructor(ACTXToken _token, address _treasury, address _rewardManager) {
+        token = _token;
+        treasury = _treasury;
+        rewardManager = _rewardManager;
+    }
+
+    function fundPool(uint256 amount) public {
+        amount = bound(amount, 1, token.balanceOf(treasury));
+        vm.prank(treasury);
+        token.fundRewardPool(amount);
+    }
+
+    function distribute(uint256 amount, address recipient) public {
+        if (token.rewardPoolBalance() == 0) return;
+        amount = bound(amount, 1, token.rewardPoolBalance());
+        recipient = recipient == address(0) ? address(1) : recipient;
+
+        vm.prank(rewardManager);
+        token.distributeReward(recipient, amount);
+        totalDistributed += amount;
+    }
+
+    function transfer(address from, address to, uint256 amount) public {
+        if (from == address(0) || to == address(0)) return;
+        if (token.balanceOf(from) == 0) return;
+
+        amount = bound(amount, 1, token.balanceOf(from));
+        vm.prank(from);
+        token.transfer(to, amount);
+    }
+}
+
+contract ACTXTokenInvariantTest is Test {
+    ACTXToken public token;
+    ACTXTokenHandler public handler;
+
+    address public treasury = makeAddr("treasury");
+    address public reservoir = makeAddr("reservoir");
+    address public rewardManager = makeAddr("rewardManager");
+
+    uint256 public constant TOTAL_SUPPLY = 100_000_000 ether;
+
+    function setUp() public {
+        ACTXToken implementation = new ACTXToken();
+        bytes memory initData = abi.encodeWithSelector(
+            ACTXToken.initialize.selector,
+            treasury,
+            reservoir,
+            200
+        );
+        ERC1967Proxy proxy = new ERC1967Proxy(
+            address(implementation),
+            initData
+        );
+        token = ACTXToken(address(proxy));
+
+        vm.startPrank(treasury);
+        token.grantRole(token.REWARD_MANAGER_ROLE(), rewardManager);
+        vm.stopPrank();
+
+        handler = new ACTXTokenHandler(token, treasury, rewardManager);
+
+        targetContract(address(handler));
+    }
+
+    function invariant_TotalSupplyNeverExceedsMax() public view {
+        assertLe(
+            token.totalSupply(),
+            TOTAL_SUPPLY + handler.totalDistributed()
+        );
+    }
+
+    function invariant_RewardPoolNeverNegative() public view {
+        assertGe(token.rewardPoolBalance(), 0);
+    }
+
+    function invariant_TaxRateNeverExceedsMax() public view {
+        assertLe(token.taxRateBasisPoints(), 1000);
+    }
+
+    function invariant_ReservoirAddressNeverZero() public view {
+        assertTrue(token.reservoirAddress() != address(0));
+    }
+}
