@@ -25,6 +25,8 @@ contract ACTXToken is
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
+    uint256 public constant UPGRADE_TIMELOCK_DELAY = 48 hours;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -55,6 +57,7 @@ contract ACTXToken is
         $.reservoirAddress = reservoir;
         $.taxExempt[treasury] = true;
         $.taxExempt[reservoir] = true;
+        $.taxExempt[address(this)] = true;
 
         _mint(treasury, TOTAL_SUPPLY);
     }
@@ -77,20 +80,31 @@ contract ACTXToken is
 
     function distributeReward(
         address recipient,
-        uint256 amount
+        uint256 amount,
+        bytes32 rewardId
     ) external onlyRole(REWARD_MANAGER_ROLE) {
         if (recipient == address(0)) revert Errors.ZeroAddressNotAllowed();
         if (amount == 0) revert Errors.ZeroAmountNotAllowed();
 
         StorageV1 storage $ = _getStorageV1();
+
+        if ($.usedRewardIds[rewardId]) {
+            revert Errors.RewardIdAlreadyUsed(rewardId);
+        }
+        $.usedRewardIds[rewardId] = true;
+
         if (amount > $.rewardPoolBalance) {
             revert Errors.InsufficientRewardPool(amount, $.rewardPoolBalance);
         }
 
         $.rewardPoolBalance -= amount;
-        _mint(recipient, amount);
+        _transfer(address(this), recipient, amount);
 
-        emit RewardDistributed(recipient, amount);
+        emit RewardDistributed(recipient, amount, rewardId);
+    }
+
+    function isRewardIdUsed(bytes32 rewardId) external view returns (bool) {
+        return _getStorageV1().usedRewardIds[rewardId];
     }
 
     function fundRewardPool(
@@ -99,7 +113,7 @@ contract ACTXToken is
         if (amount == 0) revert Errors.ZeroAmountNotAllowed();
 
         StorageV1 storage $ = _getStorageV1();
-        _burn(msg.sender, amount);
+        _transfer(msg.sender, address(this), amount);
         $.rewardPoolBalance += amount;
 
         emit RewardPoolFunded(amount);
@@ -171,7 +185,33 @@ contract ACTXToken is
         emit TaxCollected(from, to, taxAmount, netAmount);
     }
 
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyRole(UPGRADER_ROLE) {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        StorageV1 storage $ = _getStorageV1();
+        if ($.timelockController == address(0)) {
+            // Initial deployment: require UPGRADER_ROLE
+            if (!hasRole(UPGRADER_ROLE, msg.sender)) {
+                revert Errors.UnauthorizedUpgrade(msg.sender);
+            }
+        } else {
+            // After timelock set: only timelock can upgrade
+            if (msg.sender != $.timelockController) {
+                revert Errors.UnauthorizedUpgrade(msg.sender);
+            }
+        }
+    }
+
+    function timelockController() external view returns (address) {
+        return _getStorageV1().timelockController;
+    }
+
+    function setTimelockController(
+        address _timelock
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (_timelock == address(0)) revert Errors.ZeroAddressNotAllowed();
+        StorageV1 storage $ = _getStorageV1();
+        if ($.timelockController != address(0)) {
+            revert Errors.UnauthorizedAccess(msg.sender, DEFAULT_ADMIN_ROLE);
+        }
+        $.timelockController = _timelock;
+    }
 }

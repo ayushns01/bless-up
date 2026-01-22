@@ -24,13 +24,18 @@ contract ACTXTokenHandler is Test {
         token.fundRewardPool(amount);
     }
 
+    uint256 public distributeCount;
+
     function distribute(uint256 amount, address recipient) public {
         if (token.rewardPoolBalance() == 0) return;
         amount = bound(amount, 1, token.rewardPoolBalance());
         recipient = recipient == address(0) ? address(1) : recipient;
 
+        bytes32 rewardId = keccak256(
+            abi.encodePacked("reward", distributeCount++)
+        );
         vm.prank(rewardManager);
-        token.distributeReward(recipient, amount);
+        token.distributeReward(recipient, amount, rewardId);
         totalDistributed += amount;
     }
 
@@ -77,11 +82,8 @@ contract ACTXTokenInvariantTest is Test {
         targetContract(address(handler));
     }
 
-    function invariant_TotalSupplyNeverExceedsMax() public view {
-        assertLe(
-            token.totalSupply(),
-            TOTAL_SUPPLY + handler.totalDistributed()
-        );
+    function invariant_TotalSupplyExactly100M() public view {
+        assertEq(token.totalSupply(), TOTAL_SUPPLY);
     }
 
     function invariant_RewardPoolNeverNegative() public view {

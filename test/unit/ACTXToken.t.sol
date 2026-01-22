@@ -228,7 +228,7 @@ contract ACTXTokenTest is Test {
         token.fundRewardPool(poolAmount);
 
         vm.prank(rewardManager);
-        token.distributeReward(user1, rewardAmount);
+        token.distributeReward(user1, rewardAmount, keccak256("reward1"));
 
         assertEq(token.balanceOf(user1), rewardAmount);
         assertEq(token.rewardPoolBalance(), poolAmount - rewardAmount);
@@ -246,7 +246,7 @@ contract ACTXTokenTest is Test {
                 100 ether
             )
         );
-        token.distributeReward(user1, 200 ether);
+        token.distributeReward(user1, 200 ether, keccak256("reward2"));
     }
 
     function test_DistributeReward_RevertIf_ZeroRecipient() public {
@@ -255,7 +255,7 @@ contract ACTXTokenTest is Test {
 
         vm.prank(rewardManager);
         vm.expectRevert(Errors.ZeroAddressNotAllowed.selector);
-        token.distributeReward(address(0), 50 ether);
+        token.distributeReward(address(0), 50 ether, keccak256("reward3"));
     }
 
     function test_DistributeReward_RevertIf_ZeroAmount() public {
@@ -264,7 +264,7 @@ contract ACTXTokenTest is Test {
 
         vm.prank(rewardManager);
         vm.expectRevert(Errors.ZeroAmountNotAllowed.selector);
-        token.distributeReward(user1, 0);
+        token.distributeReward(user1, 0, keccak256("reward4"));
     }
 
     function test_DistributeReward_RevertIf_Unauthorized() public {
@@ -273,7 +273,7 @@ contract ACTXTokenTest is Test {
 
         vm.prank(user1);
         vm.expectRevert();
-        token.distributeReward(user2, 50 ether);
+        token.distributeReward(user2, 50 ether, keccak256("reward5"));
     }
 
     function test_Pause_BlocksTransfers() public {
@@ -308,5 +308,136 @@ contract ACTXTokenTest is Test {
         vm.prank(user1);
         vm.expectRevert();
         token.pause();
+    }
+
+    // ========== REPLAY PROTECTION TESTS ==========
+
+    function test_DistributeReward_RevertIf_DuplicateRewardId() public {
+        bytes32 rewardId = keccak256("unique-reward");
+
+        vm.prank(treasury);
+        token.fundRewardPool(1000 ether);
+
+        vm.prank(rewardManager);
+        token.distributeReward(user1, 100 ether, rewardId);
+
+        // Try same rewardId again - should revert
+        vm.prank(rewardManager);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Errors.RewardIdAlreadyUsed.selector,
+                rewardId
+            )
+        );
+        token.distributeReward(user2, 100 ether, rewardId);
+    }
+
+    function test_IsRewardIdUsed_ReturnsTrueAfterUse() public {
+        bytes32 rewardId = keccak256("test-reward");
+
+        vm.prank(treasury);
+        token.fundRewardPool(1000 ether);
+
+        assertFalse(token.isRewardIdUsed(rewardId));
+
+        vm.prank(rewardManager);
+        token.distributeReward(user1, 100 ether, rewardId);
+
+        assertTrue(token.isRewardIdUsed(rewardId));
+    }
+
+    // ========== TIMELOCK TESTS ==========
+
+    function test_SetTimelockController_SetsAddress() public {
+        address timelock = makeAddr("timelock");
+
+        vm.prank(treasury);
+        token.setTimelockController(timelock);
+
+        assertEq(token.timelockController(), timelock);
+    }
+
+    function test_SetTimelockController_RevertIf_ZeroAddress() public {
+        vm.prank(treasury);
+        vm.expectRevert(Errors.ZeroAddressNotAllowed.selector);
+        token.setTimelockController(address(0));
+    }
+
+    function test_SetTimelockController_RevertIf_AlreadySet() public {
+        address timelock1 = makeAddr("timelock1");
+        address timelock2 = makeAddr("timelock2");
+
+        vm.prank(treasury);
+        token.setTimelockController(timelock1);
+
+        vm.prank(treasury);
+        vm.expectRevert();
+        token.setTimelockController(timelock2);
+    }
+
+    function test_SetTimelockController_RevertIf_Unauthorized() public {
+        vm.prank(user1);
+        vm.expectRevert();
+        token.setTimelockController(makeAddr("timelock"));
+    }
+
+    // ========== UPGRADE AUTHORIZATION TESTS ==========
+
+    function test_AuthorizeUpgrade_AllowsUpgraderRole_WhenNoTimelock() public {
+        // Deploy new implementation
+        ACTXToken newImpl = new ACTXToken();
+
+        // Treasury has UPGRADER_ROLE, should succeed
+        vm.prank(treasury);
+        token.upgradeToAndCall(address(newImpl), "");
+
+        // Verify upgrade worked (implementation changed)
+        // Note: Can't easily verify impl address, but no revert = success
+    }
+
+    function test_AuthorizeUpgrade_RevertIf_Unauthorized_WhenNoTimelock()
+        public
+    {
+        ACTXToken newImpl = new ACTXToken();
+
+        vm.prank(user1);
+        vm.expectRevert(
+            abi.encodeWithSelector(Errors.UnauthorizedUpgrade.selector, user1)
+        );
+        token.upgradeToAndCall(address(newImpl), "");
+    }
+
+    function test_AuthorizeUpgrade_RevertIf_NotTimelock_WhenTimelockSet()
+        public
+    {
+        address timelock = makeAddr("timelock");
+
+        vm.prank(treasury);
+        token.setTimelockController(timelock);
+
+        ACTXToken newImpl = new ACTXToken();
+
+        // Even treasury can't upgrade now - must be timelock
+        vm.prank(treasury);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Errors.UnauthorizedUpgrade.selector,
+                treasury
+            )
+        );
+        token.upgradeToAndCall(address(newImpl), "");
+    }
+
+    function test_AuthorizeUpgrade_AllowsTimelock_WhenTimelockSet() public {
+        address timelock = makeAddr("timelock");
+
+        vm.prank(treasury);
+        token.setTimelockController(timelock);
+
+        ACTXToken newImpl = new ACTXToken();
+
+        // Timelock can upgrade
+        vm.prank(timelock);
+        token.upgradeToAndCall(address(newImpl), "");
     }
 }

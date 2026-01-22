@@ -83,7 +83,11 @@ contract ACTXTokenFuzzTest is Test {
         vm.stopPrank();
 
         vm.prank(rewardManager);
-        token.distributeReward(recipient, distributeAmount);
+        token.distributeReward(
+            recipient,
+            distributeAmount,
+            keccak256(abi.encodePacked(fundAmount, distributeAmount))
+        );
 
         assertEq(token.balanceOf(recipient), distributeAmount);
         assertEq(token.rewardPoolBalance(), fundAmount - distributeAmount);

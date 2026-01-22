@@ -3,7 +3,6 @@ pragma solidity ^0.8.28;
 
 library Errors {
     error UnauthorizedAccess(address caller, bytes32 requiredRole);
-    error OnlyMultiSig(address caller);
     error ZeroAddressNotAllowed();
     error ZeroAmountNotAllowed();
     error TaxRateExceedsMaximum(uint16 rate, uint16 maxRate);
@@ -19,4 +18,5 @@ library Errors {
     error AlreadyClaimed(address account);
     error KYCVerificationFailed(address account);
     error AirdropExpired();
+    error RewardIdAlreadyUsed(bytes32 rewardId);
 }

@@ -2,7 +2,11 @@
 pragma solidity ^0.8.28;
 
 interface IACTXToken {
-    event RewardDistributed(address indexed recipient, uint256 amount);
+    event RewardDistributed(
+        address indexed recipient,
+        uint256 amount,
+        bytes32 indexed rewardId
+    );
 
     event TaxCollected(
         address indexed from,
@@ -25,7 +29,13 @@ interface IACTXToken {
 
     function isTaxExempt(address account) external view returns (bool);
 
-    function distributeReward(address recipient, uint256 amount) external;
+    function distributeReward(
+        address recipient,
+        uint256 amount,
+        bytes32 rewardId
+    ) external;
+
+    function isRewardIdUsed(bytes32 rewardId) external view returns (bool);
 
     function fundRewardPool(uint256 amount) external;
 

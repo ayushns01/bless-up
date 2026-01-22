@@ -10,6 +10,8 @@ abstract contract ACTXStorageV1 {
         address reservoirAddress;
         uint256 rewardPoolBalance;
         mapping(address => bool) taxExempt;
+        mapping(bytes32 => bool) usedRewardIds;
+        address timelockController;
     }
 
     bytes32 private constant STORAGE_LOCATION =
