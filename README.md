@@ -132,8 +132,8 @@ function distributeReward(address recipient, uint256 amount, bytes32 rewardId)
 ### Installation
 
 ```bash
-git clone https://github.com/your-org/bless-up.git
-cd bless-up
+git clone https://github.com/ayushns01/act.x-token.git
+cd act.x-token
 forge install
 ```
 

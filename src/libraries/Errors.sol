@@ -18,5 +18,7 @@ library Errors {
     error AlreadyClaimed(address account);
     error KYCVerificationFailed(address account);
     error AirdropExpired();
+    error AirdropNotExpired();
+    error BatchTooLarge();
     error RewardIdAlreadyUsed(bytes32 rewardId);
 }

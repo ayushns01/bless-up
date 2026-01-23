@@ -27,6 +27,8 @@ contract ACTXToken is
 
     uint256 public constant UPGRADE_TIMELOCK_DELAY = 48 hours;
 
+    event TimelockControllerSet(address indexed timelock);
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -204,6 +206,11 @@ contract ACTXToken is
         return _getStorageV1().timelockController;
     }
 
+    /// @notice Returns the contract version for upgrade verification
+    function version() external pure returns (string memory) {
+        return "1.0.0";
+    }
+
     function setTimelockController(
         address _timelock
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -213,5 +220,6 @@ contract ACTXToken is
             revert Errors.UnauthorizedAccess(msg.sender, DEFAULT_ADMIN_ROLE);
         }
         $.timelockController = _timelock;
+        emit TimelockControllerSet(_timelock);
     }
 }

@@ -8,14 +8,37 @@ import "../../src/ACTXToken.sol";
 contract ACTXTokenHandler is Test {
     ACTXToken public token;
     address public treasury;
+    address public reservoir;
     address public rewardManager;
 
     uint256 public totalDistributed;
+    address[] public actors;
+    mapping(address => bool) public isActor;
 
-    constructor(ACTXToken _token, address _treasury, address _rewardManager) {
+    constructor(
+        ACTXToken _token,
+        address _treasury,
+        address _reservoir,
+        address _rewardManager
+    ) {
         token = _token;
         treasury = _treasury;
+        reservoir = _reservoir;
         rewardManager = _rewardManager;
+        _addActor(treasury);
+        _addActor(reservoir);
+        _addActor(address(token));
+    }
+
+    function _addActor(address actor) internal {
+        if (!isActor[actor]) {
+            isActor[actor] = true;
+            actors.push(actor);
+        }
+    }
+
+    function getActors() external view returns (address[] memory) {
+        return actors;
     }
 
     function fundPool(uint256 amount) public {
@@ -37,6 +60,7 @@ contract ACTXTokenHandler is Test {
         vm.prank(rewardManager);
         token.distributeReward(recipient, amount, rewardId);
         totalDistributed += amount;
+        _addActor(recipient);
     }
 
     function transfer(address from, address to, uint256 amount) public {
@@ -46,6 +70,8 @@ contract ACTXTokenHandler is Test {
         amount = bound(amount, 1, token.balanceOf(from));
         vm.prank(from);
         token.transfer(to, amount);
+        _addActor(from);
+        _addActor(to);
     }
 }
 
@@ -77,7 +103,12 @@ contract ACTXTokenInvariantTest is Test {
         token.grantRole(token.REWARD_MANAGER_ROLE(), rewardManager);
         vm.stopPrank();
 
-        handler = new ACTXTokenHandler(token, treasury, rewardManager);
+        handler = new ACTXTokenHandler(
+            token,
+            treasury,
+            reservoir,
+            rewardManager
+        );
 
         targetContract(address(handler));
     }
@@ -96,5 +127,18 @@ contract ACTXTokenInvariantTest is Test {
 
     function invariant_ReservoirAddressNeverZero() public view {
         assertTrue(token.reservoirAddress() != address(0));
+    }
+
+    /// @dev Verifies that sum of all tracked balances equals total supply
+    /// This catches tax calculation bugs that could leak or create tokens
+    function invariant_BalanceSumEqualsSupply() public view {
+        address[] memory actors = handler.getActors();
+        uint256 sum = 0;
+        for (uint256 i = 0; i < actors.length; i++) {
+            sum += token.balanceOf(actors[i]);
+        }
+        // Sum of tracked actors should equal total supply
+        // (assuming no tokens sent to untracked addresses)
+        assertEq(sum, TOTAL_SUPPLY);
     }
 }

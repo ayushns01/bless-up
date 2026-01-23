@@ -21,6 +21,8 @@ contract Airdrop is Ownable, ReentrancyGuard {
     uint256 public totalClaimed;
     uint256 public claimCount;
 
+    uint256 public constant MAX_BATCH_SIZE = 100;
+
     event MerkleRootUpdated(bytes32 oldRoot, bytes32 newRoot);
     event AirdropClaimed(address indexed account, uint256 amount);
     event KYCVerified(bytes32 indexed kycHash);
@@ -84,9 +86,13 @@ contract Airdrop is Ownable, ReentrancyGuard {
     }
 
     function verifyKYCBatch(bytes32[] calldata kycHashes) external onlyOwner {
-        for (uint256 i = 0; i < kycHashes.length; i++) {
+        if (kycHashes.length > MAX_BATCH_SIZE) revert Errors.BatchTooLarge();
+        for (uint256 i = 0; i < kycHashes.length; ) {
             kycVerified[kycHashes[i]] = true;
             emit KYCVerified(kycHashes[i]);
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -96,7 +102,7 @@ contract Airdrop is Ownable, ReentrancyGuard {
     }
 
     function withdrawRemaining(address to) external onlyOwner {
-        if (block.timestamp < expiryTime) revert Errors.AirdropExpired();
+        if (block.timestamp < expiryTime) revert Errors.AirdropNotExpired();
 
         uint256 balance = token.balanceOf(address(this));
         if (balance == 0) revert Errors.ZeroAmountNotAllowed();
