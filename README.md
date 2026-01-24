@@ -1,6 +1,6 @@
 # ACT.X Token
 
-An upgradeable ERC-20 rewards token for the BlessUP referral ecosystem, deployed on Base L2.
+An upgradeable ERC-20 rewards token for the BlessUP referral ecosystem.
 
 | Component | Version |
 |-----------|---------|
